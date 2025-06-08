@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <html>by mkzinho yt</html>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skate Runner com Dino</title>
+  <meta name="theme-color" content="#222" />
+  <style>
+    body, html {
+      margin: 0; padding: 0; overflow: hidden;
+      background: #222; font-family: Arial, sans-serif;
+      user-select: none; color: white;
+    }
+    #gameCanvas {
+      background: #555; display: block;
+      margin: 0 auto; border: 3px solid #eee;
+    }
+    #jumpBtn, #duckBtn {
+      position: fixed; bottom: 20px;
+      font-size: 20px; padding: 10px;
+      display: none; z-index: 1000;
+      background-color: #0f0;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #jumpBtn { left: 20px; }
+    #duckBtn { left: 120px; }
+    #restartBtn {
+      display: none;
+      position: fixed;
+      top: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 20px;
+      font-size: 20px;
+      background: #00ff00;
+      color: #ffff;
+      border: ffff;
+      border-radius: 80px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="200"></canvas>
+<div id="score">0</div>
+<button id="jumpBtn">PULAR</button>
+<button id="duckBtn">AGACHAR</button>
+<button id="restartBtn">RECOMEÇAR</button>
+
+<script>
+// 🔊 Sons
+const jumpSound = new Audio('Jump.mp3');
+const hitSound = new Audio('hit.mp3');
+const scoreSound = new Audio('Point.mp3');
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const jumpBtn = document.getElementById('jumpBtn');
+const duckBtn = document.getElementById('duckBtn');
+const restartBtn = document.getElementById('restartBtn');
+const scoreDiv = document.getElementById('score');
+
+const groundY = 130;
+let score = 0;
+let frameCount = 0;
+let gameOver = false;
+
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+if (isMobile) {
+  jumpBtn.style.display = 'block';
+  duckBtn.style.display = 'block';
+}
+
+const skyImg = new Image();
+skyImg.src = 'ceurunner.png';
+let skyX = 0;
+const skySpeed = 2;
+
+class Player {
+  constructor() {
+    this.x = 50;
+    this.y = groundY;
+    this.width = 40;
+    this.height = 30;
+    this.standHeight = 30;
+    this.duckHeight = 15;
+    this.velocityY = 0;
+    this.gravity = 0.8;
+    this.jumpForce = -15;
+    this.isJumping = false;
+    this.isDucking = false;
+  }
+  update() {
+    this.velocityY += this.gravity;
+    this.y += this.velocityY;
+
+    if (this.y > groundY) {
+      this.y = groundY;
+      this.velocityY = 0;
+      this.isJumping = false;
+    }
+
+    this.height = (this.isDucking && !this.isJumping) ? this.duckHeight : this.standHeight;
+  }
+  jump() {
+    if (!this.isJumping) {
+      this.velocityY = this.jumpForce;
+      this.isJumping = true;
+      this.isDucking = false;
+      jumpSound.play(); // 🔊 Som de pulo
+    }
+  }
+  duck(state) {
+    if (!this.isJumping) {
+      this.isDucking = state;
+    }
+  }
+  draw() {
+    ctx.fillStyle = '#0af';
+    ctx.beginPath();
+    ctx.ellipse(this.x + this.width/2, this.y - this.height/2, this.width/2, this.height/1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(this.x + this.width + 10, this.y - this.height + 5, 15, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.ellipse(this.x + this.width + 15, this.y - this.height + 2, 6, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.ellipse(this.x + this.width + 15, this.y - this.height + 2, 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(this.x - 10, this.y + 2, this.width + 40, 8);
+
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(this.x + 5, this.y + 10, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(this.x + this.width + 25, this.y + 10, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+class Obstacle {
+  constructor() {
+    this.width = 30;
+    this.height = 60;
+    this.x = canvas.width + this.width;
+    this.y = groundY + 30;
+    this.speed = 6;
+    this.passed = false;
+  }
+  update() {
+    this.x -= this.speed;
+  }
+  draw() {
+    ctx.fillStyle = '#228B22';
+    ctx.fillRect(this.x + 10, this.y - this.height, 10, this.height);
+    ctx.fillRect(this.x, this.y - this.height + 20, 10, 30);
+    ctx.fillRect(this.x + 20, this.y - this.height + 10, 10, 20);
+
+    ctx.fillStyle = '#006400';
+    for(let i = 0; i < 5; i++){
+      ctx.beginPath();
+      ctx.arc(this.x + 15, this.y - this.height + 10 + i * 10, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+let player = new Player();
+let obstacles = [];
+
+function resetGame() {
+  obstacles = [];
+  score = 0;
+  frameCount = 0;
+  gameOver = false;
+  player = new Player();
+  scoreDiv.textContent = score;
+  restartBtn.style.display = 'none';
+}
+
+function update() {
+  if (gameOver) return;
+
+  frameCount++;
+  if (frameCount % 6 === 0) {
+    score++;
+    scoreDiv.textContent = score;
+
+    if (score % 100 === 0) {
+      scoreSound.play(); // 🔊 Pontuação
+    }
+  }
+
+  if (frameCount % 90 === 0) {
+    obstacles.push(new Obstacle());
+  }
+
+  player.update();
+
+  obstacles.forEach(obs => {
+    obs.update();
+    if (
+      player.x < obs.x + obs.width &&
+      player.x + player.width > obs.x &&
+      player.y > obs.y - obs.height
+    ) {
+      if (!gameOver) hitSound.play(); // 🔊 Colisão
+      gameOver = true;
+      restartBtn.style.display = 'block';
+    }
+
+    if (!obs.passed && obs.x + obs.width < player.x) {
+      obs.passed = true;
+    }
+  });
+
+  obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  skyX -= skySpeed;
+  if (skyX <= -canvas.width) skyX = 0;
+  ctx.drawImage(skyImg, skyX, 0, canvas.width, canvas.height);
+  ctx.drawImage(skyImg, skyX + canvas.width, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#00FF00";
+  ctx.fillRect(0, groundY, canvas.width, 100);
+
+  player.draw();
+  obstacles.forEach(obs => obs.draw());
+
+  if (gameOver) {
+    ctx.fillStyle = "#f00";
+    ctx.font = "32px Arial";
+    ctx.fillText("GAME OVER", canvas.width / 6 - 0, 80);
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") player.jump();
+  if (e.code === "ArrowDown") player.duck(true);
+});
+document.addEventListener("keyup", e => {
+  if (e.code === "ArrowDown") player.duck(false);
+});
+jumpBtn.addEventListener("touchstart", () => player.jump());
+duckBtn.addEventListener("touchstart", () => player.duck(true));
+duckBtn.addEventListener("touchend", () => player.duck(false));
+restartBtn.addEventListener("click", () => resetGame());
+
+resetGame();
+loop();
+</script>
+
+</body>
+  </html>
